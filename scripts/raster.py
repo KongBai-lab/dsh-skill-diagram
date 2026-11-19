@@ -9,78 +9,80 @@
 不依赖 Pillow / cairo / 浏览器 / ImageMagick。
 坐标约定：所有 API 收“逻辑像素”，内部乘 supersample 倍数。
 """
+import glob
 import math
 import os
 import struct
 import sys
 import zlib
 
-# 可选：若 fontTools 装在自定义目录（如嵌入式发行版），用 DIAGRAM_PYLIBS 指定
-_PYLIBS = os.environ.get("DIAGRAM_PYLIBS")
+# 可选：嵌入式环境用 DIAGRAM_PYLIBS 额外注入 site-packages
+_PYLIBS = os.environ.get("DIAGRAM_PYLIBS") or ""
 if _PYLIBS and _PYLIBS not in sys.path:
     sys.path.insert(0, _PYLIBS)
 
-try:
-    from fontTools.ttLib import TTFont  # noqa: E402
-    from fontTools.pens.recordingPen import RecordingPen  # noqa: E402
-except ImportError:  # pragma: no cover
-    raise SystemExit("缺少依赖 fontTools，请先 `pip install fonttools`")
+from fontTools.ttLib import TTFont  # noqa: E402
+from fontTools.pens.recordingPen import RecordingPen  # noqa: E402
+
+# 字体发现：DIAGRAM_FONT_DIR 优先，其次常见系统字体目录。
+_FONT_DIR = os.environ.get("DIAGRAM_FONT_DIR") or ""
+
+_FONT_CANDIDATES = {
+    "reg": ["NotoSansCJK-Regular.ttc", "NotoSansCJKsc-Regular.otf",
+            "NotoSansSC-Regular.otf", "SourceHanSansSC-Regular.otf",
+            "wqy-zenhei.ttc", "DejaVuSans.ttf", "msyh.ttc", "msyh.ttf",
+            "PingFang.ttc", "FZHeiT-SC-Regular.ttf"],
+    "bold": ["NotoSansCJK-Bold.ttc", "NotoSansCJKsc-Bold.otf",
+             "NotoSans-Bold.ttf", "DejaVuSans-Bold.ttf", "msyhbd.ttc",
+             "PingFang.ttc", "FZHeiT-SC-Bold.ttf"],
+    "math": ["NotoSansMath-Regular.ttf", "DejaVuMathTeXGyre.ttf"],
+}
 
 
-def _find_font(names, hint=""):
-    """在常见字体目录里按候选名找字体；DIAGRAM_FONT_DIR 可覆盖。"""
+def _font_dirs():
     dirs = []
-    env = os.environ.get("DIAGRAM_FONT_DIR")
-    if env:
-        dirs.append(env)
-    dirs += [
-        "/system/fonts",                       # HarmonyOS
-        "/usr/share/fonts",                    # Linux
-        "/usr/local/share/fonts",
-        os.path.expanduser("~/.fonts"),
-        os.path.expanduser("~/.local/share/fonts"),
-        "C:\\Windows\\Fonts",                   # Windows
-        "/System/Library/Fonts",               # macOS
-    ]
+    if _FONT_DIR:
+        dirs.append(_FONT_DIR)
+    dirs += ["/system/fonts", "/usr/share/fonts", "/usr/local/share/fonts",
+             os.path.expanduser("~/.local/share/fonts"),
+             os.path.expanduser("~/.fonts"),
+             "/Library/Fonts", "/System/Library/Fonts",
+             os.path.expanduser("~/Library/Fonts"),
+             "C:\\Windows\\Fonts"]
+    out = []
     for d in dirs:
-        if not d or not os.path.isdir(d):
-            continue
-        for root, subdirs, files in os.walk(d):
-            depth = root[len(d):].count(os.sep)
-            if depth >= 2:
-                subdirs[:] = []
-            for n in names:
-                if n in files:
-                    return os.path.join(root, n)
-    for n in names:
-        cand = os.path.join(os.getcwd(), n)
-        if os.path.exists(cand):
-            return cand
-    raise SystemExit(
-        "找不到可用字体（%s）。请安装中文字体（如 Noto Sans CJK），"
-        "或设置环境变量 DIAGRAM_FONT_DIR 指向字体目录，例如：\n"
-        "  DIAGRAM_FONT_DIR=/usr/share/fonts/truetype/noto python diagram_png.py ..."
-        % (hint or names[0])
-    )
+        if d and os.path.isdir(d) and d not in out:
+            out.append(d)
+    return out
 
 
-FONT_BOLD = _find_font(
-    ["FZHeiT-SC-Bold.ttf", "HarmonyOS_Sans_SC_Bold.ttf", "NotoSansCJK-Bold.ttc",
-     "NotoSansSC-Bold.otf", "SourceHanSansSC-Bold.otf", "DejaVuSans-Bold.ttf"],
-    "bold")
-FONT_REG = _find_font(
-    ["FZHeiT-SC-Regular.ttf", "HarmonyOS_Sans_SC.ttf", "NotoSansCJK-Regular.ttc",
-     "NotoSansSC-Regular.otf", "SourceHanSansSC-Regular.otf", "DejaVuSans.ttf"],
-    "regular")
-try:
-    FONT_MATH = _find_font(["DejaVuMathTeXGyre.ttf", "DejaVuSans.ttf"], "math")
-except SystemExit:
-    FONT_MATH = FONT_REG
+def _find_font(names):
+    dirs = _font_dirs()
+    for d in dirs:
+        for n in names:
+            p = os.path.join(d, n)
+            if os.path.isfile(p):
+                return p
+    for d in dirs:
+        for n in names:
+            for p in glob.glob(os.path.join(d, "**", n), recursive=True):
+                if os.path.isfile(p):
+                    return p
+    return None
+
+
+FONT_REG = _find_font(_FONT_CANDIDATES["reg"])
+FONT_BOLD = _find_font(_FONT_CANDIDATES["bold"]) or FONT_REG
+FONT_MATH = _find_font(_FONT_CANDIDATES["math"]) or FONT_REG
 
 _FONTS = {}
 
 
 def _font(path):
+    if not path:
+        raise RuntimeError(
+            "找不到可用字体：请安装 Noto Sans CJK / DejaVu Sans（或任意中文 TTF），"
+            "并用环境变量 DIAGRAM_FONT_DIR 指向字体目录。")
     if path not in _FONTS:
         f = TTFont(path, fontNumber=0)
         _FONTS[path] = (f, f.getGlyphSet(), f.getBestCmap())
@@ -312,6 +314,6 @@ if __name__ == "__main__":
     c.text("中文 / ABC / 123 / ∑∫∂", 320, 180, 24, (30, 30, 30), font=FONT_REG, align="center")
     c.line(40, 260, 600, 260, (192, 0, 0), width=4)
     c.polygon([(40, 320), (140, 280), (240, 330)], (31, 78, 121))
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_raster_test.png")
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "out", "_raster_test.png")
     c.png(out)
     print("saved", out, os.path.getsize(out), "bytes")

@@ -1,11 +1,11 @@
 ---
 name: diagram
-description: 把结构化 JSON 图描述渲染成 PNG / SVG / PPT 原生矢量形状。数据图 15 种（柱状、折线、散点、饼图、环形、面积、雷达、热力、条形、漏斗、瀑布、甘特、对比矩阵、流程图、时间轴），另有程序化装饰插画（封面横幅、底纹、10 种扁平图标）。纯 Python（标准库 + fontTools）本地光栅化，无需 Pillow / 浏览器 / ImageMagick；模型只写几十 token 的 JSON。
+description: 把结构化 JSON 图描述渲染成 PNG / SVG / PPT 原生矢量形状。数据图 16 种（柱状、折线、散点、饼图、环形、面积、雷达、热力、条形、漏斗、瀑布、甘特、对比矩阵、流程图、时间轴、示意地图），另有程序化装饰插画（封面横幅、底纹、10 种扁平图标）。纯 Python（标准库 + fontTools）本地光栅化，无需 Pillow / 浏览器 / ImageMagick；模型只写几十 token 的 JSON。
 whenToUse: 用户要生成图片、画数据图/图表/示意图/流程图/时间轴/对比矩阵；或要求在 PPT 里放一张图；或说"来个图/画个图/生成图片"且内容不属于照片、插画、复杂视觉画面时。
 slug: dsh-skill-diagram
 displayName: Diagram — JSON 到图
 version: 1.0.0
-summary: 用几十 token 的 JSON 描述生成 15 种数据图与装饰插画，输出 PNG/SVG/PPTX，纯 Python 光栅化，仅依赖 fontTools。
+summary: 用几十 token 的 JSON 描述生成 16 种数据图与装饰插画，输出 PNG/SVG/PPTX，纯 Python 光栅化，仅依赖 fontTools。
 license: MIT
 tags: [dsh, skill, diagram, chart, png, svg, pptx, python, fonttools, harmonyos, agent]
 homepage: https://github.com/KongBai-lab/dsh-skill-diagram
@@ -216,3 +216,18 @@ diagram_png.render_png(spec_dict, "out.png", width=960, height=540)
 - 字形填充必须**多轮廓合并做 even-odd**，逐轮廓单独填充会把 `o`、`口` 的孔洞填实。
 - 扫描线 y 取 `y + 0.5`，边界判断用半开区间，避免重复填充。
 - 2× 超采样后再降采样，否则中文小字锯齿严重。
+
+
+## map（示意地图，仅 PNG）
+
+默认 `base=china` 内置中国轮廓，`coord=norm`（0–1 归一化坐标，[0,0] 为西北）。
+
+```json
+{"type":"map","title":"区域分布",
+ "points":[{"x":0.62,"y":0.42,"name":"北京"},{"x":0.55,"y":0.66,"name":"上海"}]}
+```
+
+- `points[]` 是**点标注**（对象数组：`x`/`y`/`name`/`note`/`side`）；区域色块用 `regions[].points`
+  （轮廓坐标数组）；也可给 `outline`（自定义轮廓）或 `coord="lonlat"`（经纬度）。
+- 是**简化示意图**，不是精确地理投影，不要当真实地图用。
+- 仅 PNG 出口；SVG/PPTX 出口只覆盖 bar/line/flow/timeline/matrix 五种。

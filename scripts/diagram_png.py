@@ -64,7 +64,8 @@ def render_png(spec, width=960, height=540, theme=None):
           "scatter": _png_scatter, "pie": _png_pie, "donut": _png_donut,
           "area": _png_area, "radar": _png_radar, "hbar": _png_hbar,
           "heatmap": _png_heatmap, "funnel": _png_funnel,
-          "waterfall": _png_waterfall, "gantt": _png_gantt}.get(spec.get("type"))
+          "waterfall": _png_waterfall, "gantt": _png_gantt,
+          "map": _png_map}.get(spec.get("type"))
     if fn is None:
         raise ValueError("不支持的图类型: %r" % spec.get("type"))
     fn(spec, c, width, height, t)
@@ -403,6 +404,162 @@ def _png_gantt(spec, c, W, H, t):
         x1 = pl + pw * task["end"] / span
         _rect(c, x0, y, x1 - x0, bh, _rgb(_PALETTE[i % len(_PALETTE)]))
         c.text(task["name"], pl - 12, y + bh / 2 + 5, 14, _rgb(t["text"]), align="right")
+
+
+# ---------------- map（示意地图） ----------------
+# 内置简化轮廓用「经纬度」存，画的时候投影到画布；只用于示意图，不求地理精确。
+_MAP_PROJ = (73.0, 135.0, 18.0, 54.0)   # lon0, lon1, lat0, lat1
+_MAP_CHINA = [
+    (73.5, 39.5), (76.0, 41.0), (80.0, 45.0), (87.0, 49.0), (90.0, 47.0),
+    (96.0, 44.0), (100.0, 42.0), (105.0, 42.0), (110.0, 45.0), (111.0, 47.0),
+    (117.0, 49.0), (120.0, 52.0), (126.0, 53.0), (130.0, 48.0), (135.0, 48.0),
+    (134.0, 45.0), (131.0, 44.0), (128.0, 42.0), (125.0, 41.0), (122.0, 39.0),
+    (119.0, 39.0), (122.0, 37.0), (120.0, 35.0), (122.0, 33.0), (121.0, 31.0),
+    (122.0, 30.0), (120.0, 27.0), (119.3, 25.3), (117.5, 23.8), (114.0, 22.0), (110.0, 21.0),
+    (108.0, 21.0), (106.0, 22.0), (104.0, 23.0), (102.0, 22.0), (99.0, 22.0),
+    (98.0, 24.0), (97.0, 28.0), (94.0, 28.0), (92.0, 28.0), (88.0, 27.0),
+    (85.0, 28.0), (81.0, 30.0), (79.0, 32.0), (78.0, 35.0), (75.0, 37.0),
+]
+_MAP_CHINA_ISLANDS = [((121.0, 23.7), 1.2, 2.0), ((110.0, 19.5), 1.3, 0.9)]
+_MAP_BASES = {"china": _MAP_CHINA}
+_MAP_COORD = {"china": "lonlat"}
+
+
+def _lonlat(lon, lat):
+    """经纬度 → 归一化坐标（x 与 y 用同一比例尺，保持长宽比）。"""
+    lon0, lon1, lat0, lat1 = _MAP_PROJ
+    return (lon - lon0) / (lon1 - lon0), (lat1 - lat) / (lon1 - lon0)
+
+
+def _chaikin(pts, rounds=1):
+    """Chaikin 角切平滑：削掉折角，不改变整体形状。"""
+    for _ in range(rounds):
+        out = []
+        n = len(pts)
+        for i in range(n):
+            x0, y0 = pts[i]
+            x1, y1 = pts[(i + 1) % n]
+            out.append((0.75 * x0 + 0.25 * x1, 0.75 * y0 + 0.25 * y1))
+            out.append((0.25 * x0 + 0.75 * x1, 0.25 * y0 + 0.75 * y1))
+        pts = out
+    return pts
+
+
+def _ellipse(c, cx, cy, rx, ry, color, sides=24):
+    c.polygon([(cx + rx * math.cos(2 * math.pi * i / sides),
+                cy + ry * math.sin(2 * math.pi * i / sides)) for i in range(sides)], color)
+
+
+def _halo_text(c, s, x, y, size, color, align="left", r=1.8):
+    """带白色描边的文字（raster 无文字描边，用八向偏移模拟）。"""
+    for dx, dy in ((-r, 0), (r, 0), (0, -r), (0, r),
+                   (-r, -r), (r, -r), (-r, r), (r, r)):
+        c.text(s, x + dx, y + dy, size, (255, 255, 255), align=align)
+    c.text(s, x, y, size, color, align=align)
+
+
+def _png_map(spec, c, W, H, t):
+    """示意地图：轮廓底图 + 区域色块 + 点标注。
+
+    坐标：默认归一化 0-1（[0,0] 西北）；base=china 或 coord="lonlat" 时用经纬度。
+    outline / regions[].points / points 都可写 [lon, lat] 或 [x, y]。
+    """
+    pl, pr, pt, pb = 56, 56, 78, 52
+    pw, ph = W - pl - pr, H - pt - pb
+    base_name = spec.get("base", "china")
+    mode = spec.get("coord") or _MAP_COORD.get(base_name, "norm")
+    outline = spec.get("outline") or _MAP_BASES.get(base_name)
+    if not outline:
+        raise ValueError("map 需要 outline 或合法 base（内置：china）")
+
+    def cv_pt(p):
+        return _lonlat(p[0], p[1]) if mode == "lonlat" else (p[0], p[1])
+
+    pts0 = [cv_pt(p) for p in outline]
+    xs = [p[0] for p in pts0]
+    ys = [p[1] for p in pts0]
+    xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
+    sw = (xmax - xmin) or 1
+    sh = (ymax - ymin) or 1
+    scale = min(pw / sw, ph / sh)
+    ox = pl + (pw - sw * scale) / 2 - xmin * scale
+    oy = pt + (ph - sh * scale) / 2 - ymin * scale
+
+    def P(p):
+        x, y = cv_pt(p)
+        return ox + x * scale, oy + y * scale
+
+    smooth = spec.get("smooth", True)
+    poly = [P(p) for p in outline]
+    if smooth:
+        poly = _chaikin(poly, 1)
+    fill = _rgb(spec.get("fill") or t["light"])
+    edge = _rgb(spec.get("color") or t["grid"])
+    c.polygon(poly, fill)
+    for i in range(len(poly)):
+        x0, y0 = poly[i]
+        x1, y1 = poly[(i + 1) % len(poly)]
+        c.line(x0, y0, x1, y1, edge, 1.2)
+    # 岛（仅内置中国底图）
+    if not spec.get("outline") and base_name == "china":
+        deg = scale / (_MAP_PROJ[1] - _MAP_PROJ[0])
+        for (lon, lat), rx, ry in _MAP_CHINA_ISLANDS:
+            x, y = P((lon, lat))
+            _ellipse(c, x, y, rx * deg, ry * deg, fill)
+
+    # 区域色块（可选）
+    for region in spec.get("regions", []):
+        rp = [P(p) for p in region["points"]]
+        if smooth:
+            rp = _chaikin(rp, 1)
+        c.polygon(rp, _rgb(region.get("color") or t["accent2"]))
+
+    _title(spec, c, W, t)
+
+    # 点标注
+    tx = _rgb(t["text"])
+    for p in spec.get("points", []):
+        x, y = P((p["x"], p["y"]))
+        col = _rgb(p.get("color") or t["accent2"])
+        _circle(c, x, y, 7.5, (255, 255, 255))
+        _circle(c, x, y, 5.2, col)
+        _circle(c, x, y, 1.9, (255, 255, 255))
+        name = p.get("name", "")
+        note = p.get("note", "")
+        side = p.get("side", "right")
+        if side == "right" and x + 96 > W - 24:
+            side = "left"
+        elif side == "left" and x - 96 < 24:
+            side = "right"
+        elif side == "up" and y - 46 < pt:
+            side = "down"
+        elif side == "down" and y + 46 > H - 20:
+            side = "up"
+        if side == "right":
+            c.line(x + 6, y, x + 13, y, col, 1.2)
+            _halo_text(c, name, x + 17, y + 5, 13, tx, "left")
+            if note:
+                _halo_text(c, note, x + 17, y + 21, 10.5, tx, "left")
+        elif side == "left":
+            c.line(x - 6, y, x - 13, y, col, 1.2)
+            _halo_text(c, name, x - 17, y + 5, 13, tx, "right")
+            if note:
+                _halo_text(c, note, x - 17, y + 21, 10.5, tx, "right")
+        elif side == "up":
+            c.line(x, y - 6, x, y - 13, col, 1.2)
+            _halo_text(c, name, x, y - 18, 13, tx, "center")
+            if note:
+                _halo_text(c, note, x, y - 33, 10.5, tx, "center")
+        else:
+            c.line(x, y + 6, x, y + 13, col, 1.2)
+            _halo_text(c, name, x, y + 28, 13, tx, "center")
+            if note:
+                _halo_text(c, note, x, y + 43, 10.5, tx, "center")
+
+    # 底部注释
+    cap = spec.get("caption")
+    if cap:
+        c.text(cap, W / 2, H - 18, 12, _rgb(t["text"]), align="center")
 
 
 DEMOS = {

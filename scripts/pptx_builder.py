@@ -22,7 +22,7 @@ NSDECL = 'xmlns:a="%s" xmlns:r="%s" xmlns:p="%s"' % (NS_A, NS_R, NS_P)
 
 XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
 
-DEMO_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_demo.pptx")
+DEMO_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "out", "_demo.pptx")
 
 
 def in_emu(inch):

@@ -1,4 +1,6 @@
 __pycache__/
 *.pyc
 diagram-out/
+_raster_test.png
+_demo.pptx
 .DS_Store
