@@ -92,7 +92,9 @@ diagram_png.render_png(spec, "bar.png", width=960, height=540)
 - `name` + `description`：DeepSeek Harness / Claude Code 等按 this 格式加载；
 - `slug` + `displayName` + `version` + `summary` + `license`：可直接发布到 SkillHub / ClawHub 类市场。
 
-**DeepSeek Harness**：把本目录放到 `$DSH_HOME/skills/diagram/`，重启会话即可（或按你的 loader 规则平铺成 `diagram.md`）。
+**DSHM（鸿蒙端侧）**：把本目录放到 `$DSH_HOME/skills/diagram/`（`$DSH_HOME` 为 DSHM 数据目录，位于鸿蒙应用沙箱内），重启会话即可（或按 loader 规则平铺成 `diagram.md`）。
+
+**DSH 桌面版（macOS / Windows / Linux）**：放到对应版本的 skills 目录（通常为 `~/.dsh/skills/diagram/`），机制相同，只是 `$DSH_HOME` 不在鸿蒙沙箱内。
 
 **Claude Code**：放到 `~/.claude/skills/diagram/`。
 
@@ -127,6 +129,14 @@ dsh-skill-diagram/
 - PNG 为光栅化结果，放大不如 SVG；需要无损缩放请用 SVG 出口。
 - 图内长文本不自动换行，标题请自行控制长度。
 - 生僻汉字可能缺字形。
+
+## 版权、第三方依赖与商标
+
+- **本项目**：MIT，见 [LICENSE](LICENSE)。示例图由本项目渲染生成，随 MIT 许可发布。
+- **第三方依赖**：`fontTools` — MIT；其余仅 Python 标准库（PSF License）。
+- **字体不随包分发**：程序读取系统已安装字体。Noto 系列为 SIL OFL 1.1；DejaVu 系列为 Bitstream Vera 许可；Windows / macOS 商业字体需你在本机自行取得授权，仓库不附带任何字体文件。
+- **商标与归属**：DSH、DSHM、DeepSeek Harness 是其各自所有者的产品名或商标；本项目是独立的第三方开源工具，与官方无隶属、赞助或背书关系。
+- **代码来源**：本仓库代码为原创实现。
 
 ## License
 
