@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Privacy check
+        run: python privacy_check.py
+
+      - name: Build zip
+        run: |
+          python - <<'PY'
+          import os, zipfile
+          repo = os.environ["GITHUB_REPOSITORY"].split("/")[-1]
+          tag = os.environ["GITHUB_REF_NAME"]
+          out = f"{repo}-{tag}.zip"
+          with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+              for dp, dn, fn in os.walk("."):
+                  dn[:] = [d for d in dn if d not in (".git", "__pycache__", "out", ".github")]
+                  for f in fn:
+                      p = os.path.join(dp, f)
+                      z.write(p, os.path.join(repo, os.path.relpath(p, ".")))
+          print("built", out)
+          PY
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: "*.zip"
+          overwrite_files: true

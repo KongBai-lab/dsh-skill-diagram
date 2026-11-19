@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+
+      - name: Privacy check
+        run: python privacy_check.py
+
+      - name: Compile Python
+        run: |
+          if find . -name '*.py' -not -path './.git/*' | grep -q .; then
+            python -m compileall -q . || exit 1
+          fi
+
+      - name: Smoke tests
+        continue-on-error: true
+        run: |
+          if [ -f tests/smoke.py ]; then python tests/smoke.py; fi
+          if [ -f tests/run_all.py ]; then python tests/run_all.py --quick; fi
+
+      - name: Generate sample docx
+        continue-on-error: true
+        run: |
+          if [ -f md2docx.py ] && [ -f sample.md ]; then python md2docx.py sample.md -o /tmp/sample.docx; fi
+
+      - name: Node syntax
+        run: |
+          if [ -f package.json ]; then
+            for f in lib/*.js; do
+              if [ -f "$f" ]; then node --check "$f"; fi
+            done
+          fi

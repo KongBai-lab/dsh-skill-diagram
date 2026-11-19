@@ -4,3 +4,6 @@ diagram-out/
 _raster_test.png
 _demo.pptx
 .DS_Store
+
+# 本地隐私词表（不进仓库）
+.privacy-words
