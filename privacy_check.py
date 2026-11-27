@@ -25,6 +25,11 @@ TEXT_EXT = {
 ALLOW_IPS = {
     "127.0.0.1", "0.0.0.0", "10.0.0.0", "172.16.0.0", "192.168.0.0",
 }
+
+# 项目公开联系邮箱（README / SECURITY.md 中主动公开，不属隐私泄露）。
+ALLOW_EMAILS = {
+    "kongbailab@yeah.net",
+}
 SKIP_FILES = {".privacy-words"}
 
 RULES = [
@@ -76,6 +81,8 @@ def main():
                 for m in rx.finditer(line):
                     val = m.group(0)
                     if label == "内网 IP" and val in ALLOW_IPS:
+                        continue
+                    if label == "邮箱" and val.lower() in ALLOW_EMAILS:
                         continue
                     hits.append((os.path.relpath(p, root), i, label, val[:80]))
 
