@@ -138,6 +138,11 @@ dsh-skill-diagram/
 - **商标与归属**：DSH、DSHM、DeepSeek Harness 是其各自所有者的产品名或商标；本项目是独立的第三方开源工具，与官方无隶属、赞助或背书关系。
 - **代码来源**：本仓库代码为原创实现。
 
+## 问题反馈
+
+- 优先在 [Issues](https://github.com/KongBai-lab/dsh-skill-diagram/issues) 提交，便于公开跟踪。
+- 不便公开时（含安全问题），发邮件到 **KongBaiLab@yeah.net**。
+
 ## License
 
 MIT。见 [LICENSE](LICENSE)。
